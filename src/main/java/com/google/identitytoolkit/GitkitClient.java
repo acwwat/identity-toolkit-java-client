@@ -16,17 +16,6 @@
 
 package com.google.identitytoolkit;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Optional;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
-import com.google.gson.JsonObject;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,6 +34,16 @@ import java.util.logging.Logger;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Optional;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 /**
  * Google Identity Toolkit client library. This class is the only interface that third party
@@ -122,7 +121,7 @@ public class GitkitClient {
    * @return Gitkit client
    */
   public static GitkitClient createFromJson(String configPath)
-      throws GitkitClientException, JSONException, IOException {
+      throws GitkitClientException, IOException {
     return createFromJson(configPath, null);
   }
 
@@ -134,24 +133,27 @@ public class GitkitClient {
      * @return Gitkit client
      */
   public static GitkitClient createFromJson(String configPath, Proxy proxy)
-      throws GitkitClientException, JSONException, IOException {
-    JSONObject configData =
-        new JSONObject(
+      throws GitkitClientException, IOException {
+    JsonObject configData =
+        new JsonParser().parse(
             StandardCharsets.UTF_8.decode(
                 ByteBuffer.wrap(Files.readAllBytes(Paths.get(configPath))))
-                .toString());
+                .toString()).getAsJsonObject();
     if (!configData.has("clientId") && !configData.has("projectId")) {
       throw new GitkitClientException("Missing projectId or clientId in server configuration.");
     }
+    JsonElement clientIdElement = configData.get("clientId");
+    JsonElement projectIdElement = configData.get("projectId");
+    JsonElement serverApiKeyElement = configData.get("serverApiKey");
     return new GitkitClient.Builder()
          .setProxy(proxy)
-         .setGoogleClientId(configData.optString("clientId", null))
-         .setProjectId(configData.optString("projectId", null))
-         .setServiceAccountEmail(configData.getString("serviceAccountEmail"))
-         .setKeyStream(new FileInputStream(configData.getString("serviceAccountPrivateKeyFile")))
-         .setWidgetUrl(configData.getString("widgetUrl"))
-         .setCookieName(configData.getString("cookieName"))
-         .setServerApiKey(configData.optString("serverApiKey", null))
+         .setGoogleClientId((clientIdElement == null) ? null : clientIdElement.getAsString())
+         .setProjectId((projectIdElement == null) ? null : projectIdElement.getAsString())
+         .setServiceAccountEmail(configData.get("serviceAccountEmail").getAsString())
+         .setKeyStream(new FileInputStream(configData.get("serviceAccountPrivateKeyFile").getAsString()))
+         .setWidgetUrl(configData.get("widgetUrl").getAsString())
+         .setCookieName(configData.get("cookieName").getAsString())
+         .setServerApiKey((serverApiKeyElement == null) ? null : serverApiKeyElement.getAsString())
          .build();
   }
 
@@ -234,12 +236,8 @@ public class GitkitClient {
    */
   public GitkitUser verifyPassword(String email, String password, String pendingIdToken, String captchaResponse)
       throws GitkitClientException, GitkitServerException {
-    try {
-      JSONObject result = rpcHelper.verifyPassword(email, password, pendingIdToken, captchaResponse);
-      return jsonToUser(result);
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
-    }
+    JsonObject result = rpcHelper.verifyPassword(email, password, pendingIdToken, captchaResponse);
+    return jsonToUser(result);
   }
 
   /**
@@ -271,15 +269,11 @@ public class GitkitClient {
     if (gitkitUser == null) {
       throw new GitkitClientException("invalid gitkit token");
     }
-    try {
-      JSONObject result = rpcHelper.getAccountInfo(token);
-        JSONObject jsonUser = result.getJSONArray("users").getJSONObject(0);
-        return jsonToUser(jsonUser)
-            // gitkit server does not return current provider
-            .setCurrentProvider(gitkitUser.getCurrentProvider());
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
-    }
+    JsonObject result = rpcHelper.getAccountInfo(token);
+    JsonObject jsonUser = result.get("users").getAsJsonArray().get(0).getAsJsonObject();
+    return jsonToUser(jsonUser)
+        // gitkit server does not return current provider
+        .setCurrentProvider(gitkitUser.getCurrentProvider());
   }
 
   /**
@@ -293,12 +287,8 @@ public class GitkitClient {
   public GitkitUser getUserByEmail(String email)
       throws GitkitClientException, GitkitServerException {
     Preconditions.checkNotNull(email);
-    try {
-      JSONObject result = rpcHelper.getAccountInfoByEmail(email);
-      return jsonToUser(result.getJSONArray("users").getJSONObject(0));
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
-    }
+    JsonObject result = rpcHelper.getAccountInfoByEmail(email);
+    return jsonToUser(result.get("users").getAsJsonArray().get(0).getAsJsonObject());
   }
 
   /**
@@ -312,12 +302,8 @@ public class GitkitClient {
   public GitkitUser getUserByLocalId(String localId)
       throws GitkitClientException, GitkitServerException {
     Preconditions.checkNotNull(localId);
-    try {
-      JSONObject result = rpcHelper.getAccountInfoById(localId);
-      return jsonToUser(result.getJSONArray("users").getJSONObject(0));
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
-    }
+    JsonObject result = rpcHelper.getAccountInfoById(localId);
+    return jsonToUser(result.get("users").getAsJsonArray().get(0).getAsJsonObject());
   }
 
   /**
@@ -344,15 +330,13 @@ public class GitkitClient {
       @Override
       protected Iterator<GitkitUser> getNextResults() {
         try {
-          JSONObject response = rpcHelper.downloadAccount(nextPageToken, resultsPerRequest);
+          JsonObject response = rpcHelper.downloadAccount(nextPageToken, resultsPerRequest);
           nextPageToken = response.has("nextPageToken")
-              ? response.getString("nextPageToken")
+              ? response.get("nextPageToken").getAsString()
               : null;
           if (response.has("users")) {
-            return jsonToList(response.getJSONArray("users")).iterator();
+            return jsonToList(response.get("users").getAsJsonArray()).iterator();
           }
-        } catch (JSONException e) {
-          logger.warning(e.getMessage());
         } catch (GitkitServerException e) {
           logger.warning(e.getMessage());
         } catch (GitkitClientException e) {
@@ -373,11 +357,7 @@ public class GitkitClient {
    */
   public GitkitUser updateUser(GitkitUser user)
       throws GitkitClientException, GitkitServerException {
-    try {
-      return jsonToUser(rpcHelper.updateAccount(user));
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
-    }
+    return jsonToUser(rpcHelper.updateAccount(user));
   }
 
   /**
@@ -513,47 +493,48 @@ public class GitkitClient {
     return null;
   }
 
-  private String buildOobLink(JSONObject oobReq, String modeParam)
+  private String buildOobLink(JsonObject oobReq, String modeParam)
       throws GitkitClientException, GitkitServerException {
-    JSONObject result = null;
     try {
-      result = rpcHelper.getOobCode(oobReq);
-      String code = result.getString("oobCode");
+      JsonObject result = rpcHelper.getOobCode(oobReq);
+      if (!result.has("oobCode")) {
+        throw new GitkitServerException("Result does not have oobCode. Response is "
+            + (result != null ? result.toString() : "(null)"));
+      }
+      String code = result.get("oobCode").getAsString();
       return widgetUrl + "?mode=" + modeParam + "&oobCode="
           + URLEncoder.encode(code, "UTF-8");
     } catch (UnsupportedEncodingException e) {
       // should never happen
       throw new GitkitServerException(e);
-    } catch (JSONException e) {
-      throw new GitkitServerException(e.getMessage()
-        + " Response is " + (result != null ? result.toString() : "(null)"));
     }
   }
 
-  private JSONObject buildPasswordResetRequest(HttpServletRequest req) throws JSONException {
-    return new JSONObject()
-        .put("email", req.getParameter("email"))
-        .put("userIp", req.getRemoteAddr())
-        .put("challenge", req.getParameter("challenge"))
-        .put("captchaResp", req.getParameter("response"))
-        .put("requestType", "PASSWORD_RESET");
+  private JsonObject buildPasswordResetRequest(HttpServletRequest req) {
+    JsonObject result = new JsonObject();
+    result.addProperty("email", req.getParameter("email"));
+    result.addProperty("userIp", req.getRemoteAddr());
+    result.addProperty("challenge", req.getParameter("challenge"));
+    result.addProperty("captchaResp", req.getParameter("response"));
+    result.addProperty("requestType", "PASSWORD_RESET");
+    return result;
   }
 
-  private JSONObject buildChangeEmailRequest(HttpServletRequest req, String gitkitToken)
-      throws JSONException {
-    return new JSONObject()
-        .put("email", req.getParameter("oldEmail"))
-        .put("userIp", req.getRemoteAddr())
-        .put("newEmail", req.getParameter("newEmail"))
-        .put("idToken", gitkitToken)
-        .put("requestType", "NEW_EMAIL_ACCEPT");
+  private JsonObject buildChangeEmailRequest(HttpServletRequest req, String gitkitToken) {
+    JsonObject result = new JsonObject();
+    result.addProperty("email", req.getParameter("oldEmail"));
+    result.addProperty("userIp", req.getRemoteAddr());
+    result.addProperty("newEmail", req.getParameter("newEmail"));
+    result.addProperty("idToken", gitkitToken);
+    result.addProperty("requestType", "NEW_EMAIL_ACCEPT");
+    return result;
   }
 
-  private JSONObject buildEmailVerificationRequest(String email)
-      throws JSONException {
-    return new JSONObject()
-        .put("email", email)
-        .put("requestType", "VERIFY_EMAIL");
+  private JsonObject buildEmailVerificationRequest(String email) {
+    JsonObject result = new JsonObject();
+    result.addProperty("email", email);
+    result.addProperty("requestType", "VERIFY_EMAIL");
+	return result;
   }
 
   /**
@@ -685,31 +666,36 @@ public class GitkitClient {
     }
   }
 
-  private List<GitkitUser> jsonToList(JSONArray accounts) throws JSONException {
+  private List<GitkitUser> jsonToList(JsonArray accounts) {
     List<GitkitUser> list = Lists.newLinkedList();
-    for (int i = 0; i < accounts.length(); i++) {
-      list.add(jsonToUser(accounts.getJSONObject(i)));
+    for (int i = 0; i < accounts.size(); i++) {
+      list.add(jsonToUser(accounts.get(i).getAsJsonObject()));
     }
     return list;
   }
 
-  private GitkitUser jsonToUser(JSONObject jsonUser) throws JSONException {
+  private GitkitUser jsonToUser(JsonObject jsonUser) {
+	JsonElement displayNameElement = jsonUser.get("displayName");
+	JsonElement photoUrlElement = jsonUser.get("photoUrl");
+	JsonElement providerUserInfoElement = jsonUser.get("providerUserInfo");
     GitkitUser user = new GitkitUser()
-        .setLocalId(jsonUser.getString("localId"))
-        .setEmail(jsonUser.getString("email"))
-        .setName(jsonUser.optString("displayName"))
-        .setPhotoUrl(jsonUser.optString("photoUrl"))
-        .setProviders(jsonUser.optJSONArray("providerUserInfo"));
+        .setLocalId(jsonUser.get("localId").getAsString())
+        .setEmail(jsonUser.get("email").getAsString())
+        .setName((displayNameElement == null) ? "" : displayNameElement.getAsString())
+        .setPhotoUrl((photoUrlElement == null) ? "" : photoUrlElement.getAsString())
+        .setProviders((providerUserInfoElement == null) ? null : providerUserInfoElement.getAsJsonArray());
     if (jsonUser.has("providerUserInfo")) {
-      JSONArray fedInfo = jsonUser.getJSONArray("providerUserInfo");
+      JsonArray fedInfo = jsonUser.get("providerUserInfo").getAsJsonArray();
       List<GitkitUser.ProviderInfo> providerInfo = new ArrayList<GitkitUser.ProviderInfo>();
-      for (int idp = 0; idp < fedInfo.length(); idp++) {
-        JSONObject provider = fedInfo.getJSONObject(idp);
+      for (int idp = 0; idp < fedInfo.size(); idp++) {
+        JsonObject provider = fedInfo.get(idp).getAsJsonObject();
+        displayNameElement = provider.get("displayName");
+        photoUrlElement = provider.get("photoUrl");
         providerInfo.add(new GitkitUser.ProviderInfo(
-            provider.getString("providerId"),
-            provider.getString("federatedId"),
-            provider.optString("displayName"),
-            provider.optString("photoUrl")));
+            provider.get("providerId").getAsString(),
+            provider.get("federatedId").getAsString(),
+            (displayNameElement == null) ? "" : displayNameElement.getAsString(),
+            (photoUrlElement == null) ? "" : photoUrlElement.getAsString()));
       }
       user.setProviders(providerInfo);
     }

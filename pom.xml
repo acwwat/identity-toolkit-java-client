@@ -95,11 +95,6 @@
       <version>1.9.13</version>
     </dependency>
     <dependency>
-      <groupId>org.json</groupId>
-      <artifactId>json</artifactId>
-      <version>20140107</version>
-    </dependency>
-    <dependency>
       <groupId>com.googlecode.jsontoken</groupId>
       <artifactId>jsontoken</artifactId>
       <version>1.1</version>

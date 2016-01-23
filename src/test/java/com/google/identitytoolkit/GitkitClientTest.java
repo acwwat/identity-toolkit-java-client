@@ -22,23 +22,25 @@ import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.io.BaseEncoding;
-
-import junit.framework.TestCase;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
-
 import java.io.ByteArrayInputStream;
 import java.util.Iterator;
 import java.util.Map;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
+
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.io.BaseEncoding;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import junit.framework.TestCase;
 
 /**
  * Test GitkitClient.
@@ -76,12 +78,19 @@ public class GitkitClientTest extends TestCase {
   }
 
   public void testGetAllUsers() throws Exception {
-    JSONObject user1 = new JSONObject().put("email", "1111@example.com").put("localId", "1111");
-    JSONObject user2 = new JSONObject().put("email", "2222@example.com").put("localId", "2222");
-    String downloadResponse = new JSONObject()
-        .put("nextPageToken", "100")
-        .put("users", new JSONArray().put(user1).put(user2))
-        .toString();
+    JsonObject user1 = new JsonObject();
+    user1.addProperty("email", "1111@example.com");
+    user1.addProperty("localId", "1111");
+    JsonObject user2 = new JsonObject();
+    user2.addProperty("email", "2222@example.com");
+    user2.addProperty("localId", "2222");
+    JsonObject downloadResponseObject = new JsonObject();
+    JsonArray usersArray = new JsonArray();
+    usersArray.add(user1);
+    usersArray.add(user2);
+    downloadResponseObject.addProperty("nextPageToken", "100");
+    downloadResponseObject.add("users", usersArray);
+    String downloadResponse = new Gson().toJson(downloadResponseObject);
     String expectedApiUrl = GitkitClient.GITKIT_API_BASE + "downloadAccount";
     // first download request
     when(mockSender.post(expectedApiUrl, "{}", headers))
@@ -93,11 +102,11 @@ public class GitkitClientTest extends TestCase {
     Iterator<GitkitUser> iterator = gitkitClient.getAllUsers();
     // iterator should contain user1 and user2
     GitkitUser user = iterator.next();
-    assertEquals(user1.getString("localId"), user.getLocalId());
-    assertEquals(user1.getString("email"), user.getEmail());
+    assertEquals(user1.get("localId").getAsString(), user.getLocalId());
+    assertEquals(user1.get("email").getAsString(), user.getEmail());
     user = iterator.next();
-    assertEquals(user2.getString("localId"), user.getLocalId());
-    assertEquals(user2.getString("email"), user.getEmail());
+    assertEquals(user2.get("localId").getAsString(), user.getLocalId());
+    assertEquals(user2.get("email").getAsString(), user.getEmail());
     // should have no more data
     assertFalse(iterator.hasNext());
   }
@@ -126,17 +135,17 @@ public class GitkitClientTest extends TestCase {
     // check the upload request
     ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
     verify(mockSender).post(eq(expectedApiUrl), captor.capture(), eq(headers));
-    JSONObject postData = new JSONObject(captor.getValue());
-    assertEquals(hashAlgorithm, postData.getString("hashAlgorithm"));
-    assertEquals(BaseEncoding.base64().encode(hashKey.getBytes()), postData.getString("signerKey"));
+    JsonObject postData = new JsonParser().parse(captor.getValue()).getAsJsonObject();
+    assertEquals(hashAlgorithm, postData.get("hashAlgorithm").getAsString());
+    assertEquals(BaseEncoding.base64().encode(hashKey.getBytes()), postData.get("signerKey").getAsString());
     // check the user data in the request
-    JSONArray userData = postData.getJSONArray("users");
-    assertEquals(1, userData.length());
-    assertEquals(user1.getEmail(), userData.getJSONObject(0).getString("email"));
-    assertEquals(user1.getLocalId(), userData.getJSONObject(0).getString("localId"));
+    JsonArray userData = postData.get("users").getAsJsonArray();
+    assertEquals(1, userData.size());
+    assertEquals(user1.getEmail(), userData.get(0).getAsJsonObject().get("email").getAsString());
+    assertEquals(user1.getLocalId(), userData.get(0).getAsJsonObject().get("localId").getAsString());
     assertEquals(
         BaseEncoding.base64().encode(user1.getHash()),
-        userData.getJSONObject(0).getString("passwordHash"));
+        userData.get(0).getAsJsonObject().get("passwordHash").getAsString());
   }
 
   public void testUpdateUser() throws Exception {
@@ -149,9 +158,9 @@ public class GitkitClientTest extends TestCase {
         .thenReturn("{'localId':'1111','displayName':'New Name','email':'1111@example.com'}");
 
     gitkitClient.updateUser(user);
-    JSONObject requestBody = new JSONObject(postCaptor.getValue());
-    assertEquals(user.getLocalId(), requestBody.getString("localId"));
-    assertEquals(user.getName(), requestBody.getString("displayName"));
+    JsonObject requestBody = new JsonParser().parse(postCaptor.getValue()).getAsJsonObject();
+    assertEquals(user.getLocalId(), requestBody.get("localId").getAsString());
+    assertEquals(user.getName(), requestBody.get("displayName").getAsString());
   }
 
   public void testGetOobCode() throws Exception {

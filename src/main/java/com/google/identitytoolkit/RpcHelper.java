@@ -16,18 +16,6 @@
 
 package com.google.identitytoolkit;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Maps;
-import com.google.common.io.BaseEncoding;
-
-import net.oauth.jsontoken.JsonToken;
-import net.oauth.jsontoken.crypto.RsaSHA256Signer;
-
-import org.joda.time.Instant;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.GeneralSecurityException;
@@ -42,6 +30,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import org.joda.time.Instant;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Maps;
+import com.google.common.io.BaseEncoding;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+
+import net.oauth.jsontoken.JsonToken;
+import net.oauth.jsontoken.crypto.RsaSHA256Signer;
 
 /**
  * Wraps the http interactions for Gitkit APIs.
@@ -65,58 +67,46 @@ public class RpcHelper {
     signer = initRsaSHA256Signer(serviceAccountEmail, keyStream);
   }
 
-  public JSONObject createAuthUri(String identifier, String continueUri, String context)
+  public JsonObject createAuthUri(String identifier, String continueUri, String context)
       throws GitkitServerException, GitkitClientException {
-    JSONObject params = new JSONObject();
-    try {
-      if (identifier != null) {
-        params.put("identifier", identifier);
-      }
-      if (continueUri != null) {
-        params.put("continueUri", continueUri);
-      }
-      if (context != null) {
-        params.put("context", context);
-      }
-      return invokeGitkitApi("createAuthUri", params, null);
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
+    JsonObject params = new JsonObject();
+    if (identifier != null) {
+      params.addProperty("identifier", identifier);
     }
+    if (continueUri != null) {
+      params.addProperty("continueUri", continueUri);
+    }
+    if (context != null) {
+      params.addProperty("context", context);
+    }
+    return invokeGitkitApi("createAuthUri", params, null);
   }
 
-  public JSONObject verifyAssertion(String requestUri, String postBody)
+  public JsonObject verifyAssertion(String requestUri, String postBody)
       throws GitkitServerException, GitkitClientException {
-    JSONObject params = new JSONObject();
-    try {
-      params.put("requestUri", requestUri);
-      if (postBody != null) {
-        params.put("postBody", postBody);
-      }
-      return invokeGitkitApi("verifyAssertion", params, null);
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
+    JsonObject params = new JsonObject();
+    params.addProperty("requestUri", requestUri);
+    if (postBody != null) {
+      params.addProperty("postBody", postBody);
     }
+    return invokeGitkitApi("verifyAssertion", params, null);
   }
 
-  public JSONObject verifyPassword(String email, String password, String pendingIdToken, String captchaResponse)
+  public JsonObject verifyPassword(String email, String password, String pendingIdToken, String captchaResponse)
       throws GitkitServerException, GitkitClientException {
-    try {
-      JSONObject params = new JSONObject()
-          .put("email", email)
-          .put("password", password);
-      if (pendingIdToken != null) {
-        params.put("pendingIdToken", pendingIdToken);
-      }
-      if (captchaResponse != null) {
-        params.put("captchaResponse", captchaResponse);
-      }
-      return invokeGoogle2LegOauthApi("verifyPassword", params);
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
+    JsonObject params = new JsonObject();
+    params.addProperty("email", email);
+    params.addProperty("password", password);
+    if (pendingIdToken != null) {
+      params.addProperty("pendingIdToken", pendingIdToken);
     }
+    if (captchaResponse != null) {
+      params.addProperty("captchaResponse", captchaResponse);
+    }
+    return invokeGoogle2LegOauthApi("verifyPassword", params);
   }
 
-  public JSONObject getOobCode(JSONObject resetReq)
+  public JsonObject getOobCode(JsonObject resetReq)
       throws GitkitClientException, GitkitServerException {
     return invokeGoogle2LegOauthApi("getOobConfirmationCode", resetReq);
   }
@@ -126,110 +116,88 @@ public class RpcHelper {
    *
    * @param idToken
    */
-  public JSONObject getAccountInfo(String idToken)
+  public JsonObject getAccountInfo(String idToken)
       throws GitkitClientException, GitkitServerException {
-    try {
-      // Uses idToken to make the server call to GITKit
-      JSONObject params = new JSONObject().put("idToken", idToken);
-      return invokeGoogle2LegOauthApi("getAccountInfo", params);
-    } catch (JSONException e) {
-      throw new GitkitServerException("OAuth API failed");
-    }
+    // Uses idToken to make the server call to GITKit
+    JsonObject params = new JsonObject();
+    params.addProperty("idToken", idToken);
+    return invokeGoogle2LegOauthApi("getAccountInfo", params);
   }
 
   /**
    * Using 2-Leg Oauth (i.e. Service Account).
    */
-  public JSONObject getAccountInfoById(String localId)
+  public JsonObject getAccountInfoById(String localId)
       throws GitkitClientException, GitkitServerException {
-    try {
-      JSONObject params = new JSONObject()
-          .put("localId", new JSONArray().put(localId));
-      return invokeGoogle2LegOauthApi("getAccountInfo", params);
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
-    }
+    JsonObject params = new JsonObject();
+    JsonArray localIdArray = new JsonArray();
+    localIdArray.add(new JsonPrimitive(localId));
+    params.add("localId", localIdArray);
+    return invokeGoogle2LegOauthApi("getAccountInfo", params);
   }
 
   /**
    * Using 2-Leg Oauth (i.e. Service Account).
    */
-  public JSONObject getAccountInfoByEmail(String email)
+  public JsonObject getAccountInfoByEmail(String email)
       throws GitkitClientException, GitkitServerException {
-    try {
-      JSONObject params = new JSONObject()
-          .put("email", new JSONArray().put(email));
-      return invokeGoogle2LegOauthApi("getAccountInfo", params);
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
-    }
+    JsonObject params = new JsonObject();
+    JsonArray emailArray = new JsonArray();
+    emailArray.add(new JsonPrimitive(email));
+    params.add("email", emailArray);
+    return invokeGoogle2LegOauthApi("getAccountInfo", params);
   }
 
-  public JSONObject updateAccount(GitkitUser account)
+  public JsonObject updateAccount(GitkitUser account)
       throws GitkitServerException, GitkitClientException {
-    try {
-      JSONObject params = new JSONObject()
-          .put("email", account.getEmail())
-          .put("localId", account.getLocalId());
-      if (account.getName() != null) {
-        params.put("displayName", account.getName());
-      }
-      if (account.getHash() != null) {
-        params.put("password", account.getHash());
-      }
-      return invokeGoogle2LegOauthApi("setAccountInfo", params);
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
+    JsonObject params = new JsonObject();
+    params.addProperty("email", account.getEmail());
+    params.addProperty("localId", account.getLocalId());
+    if (account.getName() != null) {
+      params.addProperty("displayName", account.getName());
     }
+    if (account.getHash() != null) {
+      params.addProperty("password", new String(account.getHash()));
+    }
+    return invokeGoogle2LegOauthApi("setAccountInfo", params);
   }
 
-  public JSONObject downloadAccount(String nextPageToken, Integer maxResults)
+  public JsonObject downloadAccount(String nextPageToken, Integer maxResults)
       throws GitkitClientException, GitkitServerException {
-    try {
-      JSONObject params = new JSONObject();
-      if (nextPageToken != null) {
-        params.put("nextPageToken", nextPageToken);
-      }
-      if (maxResults != null) {
-        params.put("maxResults", maxResults);
-      }
-      return invokeGoogle2LegOauthApi("downloadAccount", params);
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
+    JsonObject params = new JsonObject();
+    if (nextPageToken != null) {
+      params.addProperty("nextPageToken", nextPageToken);
     }
+    if (maxResults != null) {
+      params.addProperty("maxResults", maxResults);
+    }
+    return invokeGoogle2LegOauthApi("downloadAccount", params);
   }
 
-  public JSONObject uploadAccount(String hashAlgorithm, byte[] hashKey, List<GitkitUser> accounts,
+  public JsonObject uploadAccount(String hashAlgorithm, byte[] hashKey, List<GitkitUser> accounts,
                                   byte[] saltSeparator, Integer rounds, Integer memoryCost)
           throws GitkitClientException, GitkitServerException {
-    try {
-      JSONObject params = new JSONObject()
-          .put("hashAlgorithm", hashAlgorithm)
-          .put("signerKey", BaseEncoding.base64Url().encode(hashKey))
-          .put("users", toJsonArray(accounts));
-        if (saltSeparator != null) {
-            params.put("saltSeparator", BaseEncoding.base64Url().encode(saltSeparator));
-        }
-        if (rounds != null) {
-            params.put("rounds", rounds);
-        }
-        if (memoryCost != null) {
-            params.put("memoryCost", memoryCost);
-        }
-      return invokeGoogle2LegOauthApi("uploadAccount", params);
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
-    }
+    JsonObject params = new JsonObject();
+    params.addProperty("hashAlgorithm", hashAlgorithm);
+    params.addProperty("signerKey", BaseEncoding.base64Url().encode(hashKey));
+    params.add("users", toJsonArray(accounts));
+      if (saltSeparator != null) {
+          params.addProperty("saltSeparator", BaseEncoding.base64Url().encode(saltSeparator));
+      }
+      if (rounds != null) {
+          params.addProperty("rounds", rounds);
+      }
+      if (memoryCost != null) {
+          params.addProperty("memoryCost", memoryCost);
+      }
+    return invokeGoogle2LegOauthApi("uploadAccount", params);
   }
 
-  public JSONObject deleteAccount(String localId)
+  public JsonObject deleteAccount(String localId)
       throws GitkitClientException, GitkitServerException {
-    try {
-      JSONObject params = new JSONObject().put("localId", localId);
-      return invokeGoogle2LegOauthApi("deleteAccount", params);
-    } catch (JSONException e) {
-      throw new GitkitServerException(e);
-    }
+    JsonObject params = new JsonObject();
+    params.addProperty("localId", localId);
+    return invokeGoogle2LegOauthApi("deleteAccount", params);
   }
 
   String downloadCerts(String serverApiKey) throws IOException {
@@ -242,22 +210,18 @@ public class RpcHelper {
         headers.put("Authorization", "Bearer " + getAccessToken());
       } catch (GeneralSecurityException e) {
         throw new IOException(e);
-      } catch (JSONException e) {
-        throw new IOException(e);
       }
     }
     return httpSender.get(certUrl, headers);
   }
 
   @VisibleForTesting
-  JSONObject invokeGoogle2LegOauthApi(String method, JSONObject req)
+  JsonObject invokeGoogle2LegOauthApi(String method, JsonObject req)
       throws GitkitClientException, GitkitServerException {
     try {
       String accessToken = getAccessToken();
       return invokeGitkitApi(method, req, accessToken);
     } catch (GeneralSecurityException e) {
-      throw new GitkitServerException(e);
-    } catch (JSONException e) {
       throw new GitkitServerException(e);
     } catch (IOException e) {
       throw new GitkitServerException(e);
@@ -265,14 +229,15 @@ public class RpcHelper {
   }
 
   @VisibleForTesting
-  String getAccessToken() throws GeneralSecurityException, IOException, JSONException {
+  String getAccessToken() throws GeneralSecurityException, IOException {
     String assertion = signServiceAccountRequest();
     String data = "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion="
         + assertion;
     Map<String, String> headers = Maps.newHashMap();
     headers.put("Content-Type", "application/x-www-form-urlencoded");
     String response = httpSender.post(TOKEN_SERVER, data, headers);
-    return new JSONObject(response).getString("access_token");
+    JsonObject responseObject = new JsonParser().parse(response).getAsJsonObject();
+    return responseObject.get("access_token").getAsString();
   }
 
   @VisibleForTesting
@@ -286,7 +251,7 @@ public class RpcHelper {
     return assertion.serializeAndSign();
   }
 
-  private JSONObject invokeGitkitApi(String method, JSONObject params, String accessToken)
+  private JsonObject invokeGitkitApi(String method, JsonObject params, String accessToken)
       throws GitkitClientException, GitkitServerException {
     try {
       Map<String, String> headers = Maps.newHashMap();
@@ -329,53 +294,56 @@ public class RpcHelper {
     return null;
   }
 
-  private static JSONArray toJsonArray(List<GitkitUser> accounts) throws JSONException {
-    JSONArray infos = new JSONArray();
+  private static JsonArray toJsonArray(List<GitkitUser> accounts) {
+    JsonArray infos = new JsonArray();
     for (GitkitUser account : accounts) {
-      JSONObject user = new JSONObject();
-      user.put("email", account.getEmail());
-      user.put("localId", account.getLocalId());
+      JsonObject user = new JsonObject();
+      user.addProperty("email", account.getEmail());
+      user.addProperty("localId", account.getLocalId());
       if (account.getHash() != null) {
-        user.put("passwordHash", BaseEncoding.base64Url().encode(account.getHash()));
+        user.addProperty("passwordHash", BaseEncoding.base64Url().encode(account.getHash()));
       }
       if (account.getSalt() != null) {
-        user.put("salt", BaseEncoding.base64Url().encode(account.getSalt()));
+        user.addProperty("salt", BaseEncoding.base64Url().encode(account.getSalt()));
       }
       if (account.getProviders() != null) {
-        JSONArray providers = new JSONArray();
+        JsonArray providers = new JsonArray();
         for (GitkitUser.ProviderInfo idpInfo : account.getProviders()) {
-          providers.put(new JSONObject()
-              .put("federatedId", idpInfo.getFederatedId())
-              .put("providerId", idpInfo.getProviderId()));
+          JsonObject provider = new JsonObject();
+          provider.addProperty("federatedId", idpInfo.getFederatedId());
+          provider.addProperty("providerId", idpInfo.getProviderId());
+          providers.add(provider);
         }
-        user.put("providerUserInfo", providers);
+        user.add("providerUserInfo", providers);
       }
-      infos.put(user);
+      infos.add(user);
     }
     return infos;
   }
 
   @VisibleForTesting
-  JSONObject checkGitkitException(String response)
+  JsonObject checkGitkitException(String response)
       throws GitkitClientException, GitkitServerException {
-    try {
-      JSONObject result = new JSONObject(response);
-      if (!result.has("error")) {
-        return result;
+    JsonElement resultElement = new JsonParser().parse(response);
+    if (!resultElement.isJsonObject()) {
+      throw new GitkitServerException("null error code from Gitkit server");
+    }
+    JsonObject result = resultElement.getAsJsonObject();
+    if (!result.has("error")) {
+      return result;
+    }
+    // Error handling
+    JsonObject error = result.getAsJsonObject("error");
+    JsonElement codeElement = error.get("code");
+    if (codeElement != null) {
+      JsonElement messageElement = error.get("message");
+      String message = (messageElement == null) ? "" : messageElement.getAsString();
+      if (codeElement.getAsString().startsWith("4")) {
+        // 4xx means client input error
+        throw new GitkitClientException(message);
+      } else {
+        throw new GitkitServerException(message);
       }
-      // Error handling
-      JSONObject error = result.getJSONObject("error");
-      String code = error.optString("code");
-      if (code != null) {
-        if (code.startsWith("4")) {
-          // 4xx means client input error
-          throw new GitkitClientException(error.optString("message"));
-        } else {
-          throw new GitkitServerException(error.optString("message"));
-        }
-      }
-    } catch (JSONException e) {
-      log.log(Level.WARNING, "Server response exception: " + e.getMessage(), e);
     }
     throw new GitkitServerException("null error code from Gitkit server");
   }

@@ -16,15 +16,14 @@
 
 package com.google.identitytoolkit;
 
-import com.google.common.collect.Lists;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import com.google.common.collect.Lists;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 /**
  * Wrapper class containing user attributes.
@@ -88,23 +87,25 @@ public class GitkitUser {
     return providers;
   }
 
-  public GitkitUser setProviders(JSONArray providers) throws JSONException {
+  public GitkitUser setProviders(JsonArray providers) {
     List<ProviderInfo> providerInfo = new ArrayList<ProviderInfo>();
     if (providers != null) {
-      for (int i = 0; i < providers.length(); i++) {
-        JSONObject provider = providers.getJSONObject(i);
+      for (int i = 0; i < providers.size(); i++) {
+        JsonObject provider = providers.get(i).getAsJsonObject();
+        JsonElement displayNameElement = provider.get("displayName");
+        JsonElement photoUrlElement = provider.get("photoUrl");
         providerInfo.add(new ProviderInfo(
-            provider.getString("providerId"),
-            provider.getString("federatedId"),
-            provider.optString("displayName"),
-            provider.optString("photoUrl")));
+            provider.get("providerId").getAsString(),
+            provider.get("federatedId").getAsString(),
+            (displayNameElement == null) ? "" : displayNameElement.getAsString(),
+            (photoUrlElement == null) ? "" : photoUrlElement.getAsString()));
       }
     }
     this.providers = providerInfo;
     return this;
   }
 
-  public GitkitUser setProviders(List<ProviderInfo> providers) throws JSONException {
+  public GitkitUser setProviders(List<ProviderInfo> providers) {
     this.providers.clear();
     this.providers.addAll(providers);
     return this;
